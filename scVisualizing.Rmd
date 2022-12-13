@@ -1,0 +1,284 @@
+# Visualization of identification summaries for single-cell runs
+
+### This script is used to plot the data from summary statistics of SN16 searches 
+```{r}
+library(tidyverse)
+library(ggprism)
+myColors2 = c("#5f0f40", '#9a031e', '#fb8b24', '#e36414', '#0f4c5c')
+source('helperFunctions.R')
+```
+
+
+```{r}
+#Importing data 
+
+#Resaved the file with numbers to remove the thousand separator but that caused extra issues. Have to adjust the generateSNstats.py function to avoid the format issues
+sc_set <- read.csv("data/SN17/SN17-R11_stats.csv", sep = "\t", dec = ",") %>% as_tibble() %>% 
+                mutate(Precursors = as.numeric(gsub("\\.", "", Precursors)),
+                        Peptides = as.numeric(gsub("\\.", "", Peptides)), 
+                        Protein.Groups = as.numeric(gsub("\\.", "", Protein.Groups))) %>% 
+             mutate(gradient = factor(str_match(X, pattern = "precol_(.+?)_240k")[,2]),
+                    usedQBL = ifelse(grepl("QBL|QFL", X), "+", "-")) %>% 
+             group_by(gradient, usedQBL)
+
+sc_set_summary <- calculate_summary(sc_set)
+```
+
+## Single-cell dataset runs 
+
+```{r}
+ylimits = c(0,7000)
+#Converting the dataframes to long format
+sc_set_long <- sc_set %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+                filter(Values != "Precursors",) %>% 
+                mutate(gradient = gsub("min", "",gradient))
+sc_set_summary_long <- sc_set_summary %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+                filter(Values != "Precursors") %>% 
+                mutate(gradient = gsub("min", "",gradient))
+
+#Generating the plot 
+ylimits = c(0,7000)
+ggplot(sc_set_long %>% filter(Values == "Peptides"), aes(x = usedQBL, y = Counts, fill = gradient, color = gradient, label = Counts)) + 
+    geom_bar(data = sc_set_summary_long %>% filter(Values == "Peptides"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) + 
+    geom_text(data = sc_set_summary_long %>% filter(Values == "Peptides"), color = "black", vjust = -5,  fontface = "bold")+
+    scale_fill_manual(values = c('#003049', '#d62828')) +
+    scale_color_manual(values = c('#003049', '#d62828')) +
+    facet_grid(col = vars(gradient)) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(), 
+          axis.text.x = element_text(angle = 0), panel.spacing = unit(1, "lines")) + 
+    ylab('Peptides') + xlab("")
+
+ylimits = c(0,2500)
+ggplot(sc_set_long %>% filter(Values == "Protein.Groups"), aes(x = usedQBL, y = Counts, fill = gradient, color = gradient, label = Counts)) + 
+    geom_bar(data = sc_set_summary_long %>% filter(Values == "Protein.Groups"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) + 
+    geom_text(data = sc_set_summary_long %>% filter(Values == "Protein.Groups"), color = "black", vjust = -4.5,  fontface = "bold")+
+    scale_fill_manual(values = c('#023f60', '#9c1d1d')) +
+    scale_color_manual(values = c('#023f60', '#9c1d1d')) +
+    facet_grid(col = vars(gradient)) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(), 
+          axis.text.x = element_text(angle = 0), panel.spacing = unit(1, "lines")) + 
+    ylab('Protein groups') + xlab("")
+```
+
+# Precision analysis directDIA vs QBL 
+```{r}
+min29_direct <- read.csv('data/SN17/SN17-R11-29min-1cell_PG.tsv', dec = ",", sep= "\t") %>% as_tibble()
+min29_qbl <- read.csv('data/SN17/SN17-R11-29min-1cell-QBL_PG.tsv', dec = ",", sep= "\t") %>% as_tibble()
+min52_direct <- read.csv('data/SN17/SN17-R11-52min-1cell_PG.tsv', dec = ",", sep= "\t") %>% as_tibble()
+min52_qbl <- read.csv('data/SN17/SN17-R11-52min-1cell-QBL_PG.tsv', dec = ",", sep= "\t") %>% as_tibble()
+
+#Chaning column names 
+
+colnames(min29_direct) <- c("Accessions", 'Genes', paste('Cell', 1:62, sep = ''))
+colnames(min29_qbl) <- c("Accessions", 'Genes', paste('Cell', 1:62, sep = ''))
+colnames(min52_direct) <- c("Accessions", 'Genes', paste('Cell', 1:40, sep = ''))
+colnames(min52_qbl) <- c("Accessions", 'Genes', paste('Cell', 1:40, sep = ''))
+
+#Changing the word 'Filtered' to NA and drop cells with low protein id numbers
+min29_direct[min29_direct == "Filtered"] <- NA; min29_direct <- min29_direct[, colSums(is.na(min29_direct)) < 1500]
+min29_qbl[min29_qbl == "Filtered"] <- NA; min29_qbl <- min29_qbl[, colSums(is.na(min29_qbl)) < 1500]
+min52_direct[min52_direct == "Filtered"] <- NA; min52_direct <- min52_direct[, colSums(is.na(min52_direct)) < 1500]
+min52_qbl[min52_qbl == "Filtered"] <- NA; min52_qbl <- min52_qbl[, colSums(is.na(min52_qbl)) < 1500]
+```
+
+```{r}
+#Extrac proteins calculated in both methods 
+in29 <- intersect(min29_direct$Accessions, min29_qbl$Accessions)
+in52 <- intersect(min52_direct$Accessions, min52_qbl$Accessions)
+```
+
+### CV analysis 
+```{r}
+min29_cvs <- min29_qbl %>% gather(Cell, Abundance, Cell2:Cell62) %>% group_by(Accessions, Genes) %>%
+                        mutate(Abundance = as.numeric(sub(",", ".", Abundance, fixed = TRUE))) %>% 
+                        summarise(avg = mean(Abundance, na.rm =TRUE),
+                                  std = sd(Abundance, na.rm = TRUE),
+                                  cv = std/avg) %>% 
+                        mutate(QBLonly = ifelse(Accessions %in% in29, "Direct", 'GPF'))
+
+min29_cvs <- bind_rows(min29_cvs, min29_cvs %>% mutate(QBLonly = "Total")) %>%
+                  mutate(QBLonly = factor(QBLonly, levels = c("Total", 'Direct', 'GPF')))
+
+min52_cvs <- min52_qbl %>% gather(Cell, Abundance, Cell1:Cell40) %>% group_by(Accessions, Genes) %>%
+                        mutate(Abundance = as.numeric(sub(",", ".", Abundance, fixed = TRUE))) %>% 
+                        summarise(avg = mean(Abundance, na.rm =TRUE),
+                                  std = sd(Abundance, na.rm = TRUE),
+                                  cv = std/avg)  %>% 
+                        mutate(QBLonly = ifelse(Accessions %in% in52, "Direct", 'GPF'))
+
+min52_cvs <- bind_rows(min52_cvs, min52_cvs %>% mutate(QBLonly = "Total")) %>%
+                  mutate(QBLonly = factor(QBLonly, levels = c("Total", 'Direct', 'GPF')))
+
+```
+
+### CV histograms 
+```{r}
+ggplot(min29_cvs, 
+        aes(x = cv, color = QBLonly, fill = QBLonly)) + 
+        geom_histogram(aes(y=..density..),bins = 50, alpha = .8) +
+        geom_density(alpha = 0.1,size = 1) +
+        facet_grid(vars(QBLonly)) + 
+        scale_fill_manual(values = c('grey50','#003049', '#2f7ca6')) +
+        scale_color_manual(values = c('grey50','#003049', '#2f7ca6')) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlab('CV') + ylab("Density") +
+        xlim(c(0,1)) + ylim(c(0,5)) +
+        geom_vline(xintercept = 0.1, linetype ='dashed', size = 0.8, color = 'grey') +
+        geom_vline(xintercept = 0.4, linetype ='dashed', size = 0.8, color = 'grey') 
+
+ggplot(min52_cvs, 
+        aes(x = cv, color = QBLonly, fill = QBLonly)) + 
+        geom_histogram(aes(y=..density..),bins = 50, alpha = .8) +
+        geom_density(alpha = 0.1,size = 1) +
+        facet_grid(vars(QBLonly)) + 
+        scale_fill_manual(values = c('grey50','#d62828', '#a85353')) +
+        scale_color_manual(values = c('grey50','#d62828', '#a85353')) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlab('CV') + ylab("Density") +
+        xlim(c(0,1)) + ylim(c(0,5)) +
+        geom_vline(xintercept = 0.1, linetype ='dashed', size = 0.8, color = 'grey') +
+        geom_vline(xintercept = 0.4, linetype ='dashed', size = 0.8, color = 'grey') 
+
+```
+
+### CV vs abundance hexbins
+```{r}
+ggplot(min29_cvs %>% filter(QBLonly != 'Total'),
+        aes(y = log2(avg), x= cv)) +
+        geom_hex(bins=35) +
+        xlim(c(0,0.3)) +
+        facet_wrap(~QBLonly) +
+        theme_prism() +
+        #viridis::scale_fill_viridis(option = "A") +
+        scale_fill_gradientn(colours = c('#bfd9e6','#0175b4')) +
+        ylab("log2(Abundance)") + xlab("CV")
+
+
+ggplot(min52_cvs %>% filter(QBLonly != 'Total'),
+        aes(y = log2(avg), x= cv)) +
+        geom_hex(bins=35) +
+        xlim(c(0,0.3)) +
+        facet_wrap(~QBLonly) +
+        theme_prism() +
+        #viridis::scale_fill_viridis(option = "A") +
+        scale_fill_gradientn(colours = c('#fcd0d0','#d10303')) +
+        ylab("log2(Abundance)") + xlab("CV")
+
+```
+
+### Calculating percentage of missing values in the datasets
+```{r}
+# Percentage = proteins in sample / total proteins in dataset 
+
+mis29_direct = (dim(min29_direct)[1] - colSums(is.na(min29_direct))[3:dim(min29_direct)[2]])/dim(min29_direct)[1]
+mis29_qbl = (dim(min29_qbl)[1] - colSums(is.na(min29_qbl))[3:dim(min29_qbl)[2]])/dim(min29_qbl)[1]
+mis52_direct = (dim(min52_direct)[1] - colSums(is.na(min52_direct))[3:dim(min52_direct)[2]])/dim(min52_direct)[1]
+mis52_qbl = (dim(min52_qbl)[1] - colSums(is.na(min52_qbl))[3:dim(min52_qbl)[2]])/dim(min52_qbl)[1]
+
+#Combine into dataframe for plotting
+
+comp_df <- data.frame(completeness = c(mis29_direct, mis29_qbl, mis52_direct, mis52_qbl),
+                      gradient = c(rep('29min', length(mis29_direct)*2), rep('52min', length(mis52_direct)*2)),
+                      QBL = c(rep('Direct', length(mis29_direct)), rep('GPF', length(mis29_qbl)),
+                              rep('Direct', length(mis52_direct)), rep('GPF', length(mis52_qbl))))
+
+comp_labels <- data.frame(gradient = c("29min", "29min", "52min", "52min"),
+                          QBL = c("Direct", "GPF", "Direct", "GPF"),
+                          x = 0.63, y = 15, pg = c(dim(min29_direct)[1],dim(min29_qbl)[1], dim(min52_direct)[1],dim(min52_qbl)[1]))
+```
+
+```{r}
+ggplot(comp_df, aes(x = completeness, color = gradient, fill = gradient)) + 
+        geom_histogram(aes(y=..density..),bins = 50, alpha = .8) +
+        geom_density(alpha = 0.1,size = 1) +
+        facet_grid(cols = vars(QBL), rows = vars(gradient)) +
+        scale_fill_manual(values = c('#003049', '#d62828')) +
+        scale_color_manual(values = c('#003049', '#d62828')) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlab('Data completeness') + ylab("Density") +
+        xlim(c(0.55,1)) + ylim(c(0,22)) + 
+        geom_vline(xintercept = 0.7, linetype ='dashed', size = 0.8, color = 'grey50') +
+        geom_text(data =comp_labels, aes(x=x, y =y, label = pg), fontface = "bold")
+```
+
+```{r}
+ggplot(comp_df, aes(x = completeness, color = gradient, fill = gradient)) + 
+  stat_ecdf(geom = "step", size = 2) +
+  facet_grid(cols = vars(QBL), rows = vars(gradient)) +
+  scale_fill_manual(values = c('#003049', '#d62828')) +
+  scale_color_manual(values = c('#003049', '#d62828')) +
+  theme_prism() +
+  theme(legend.position = "none") +
+  xlab('Data completeness') + ylab("Density") +
+  xlim(c(0.6,1)) +
+  geom_vline(xintercept = 0.7, linetype ='dashed', size = 0.8, color = 'grey50')
+
+```
+
+## Importing PCA and UMAP results from python for plotting 
+```{r}
+sc_pca <- read.csv("results/pca.csv", sep = "\t") %>% as_tibble() 
+sc_umap <- read.csv("results/umap.csv", sep = "\t") %>% as_tibble() %>% mutate(Gradient = c(rep('29min',60), rep('52min',38)))
+```
+
+```{r}
+#Plotting the PCA 
+
+ggplot(sc_pca, aes(x = `PC1.63.3.`, y = `PC2.5.2.`, color = MKI67)) + 
+      geom_point(size = 3, alpha = 0.8) +
+      theme_prism(border = TRUE, base_rect_size = 2) +
+      xlab('PC1 (63.3%)') + ylab('PC2 (5.2%)') +
+      #viridis::scale_color_viridis(option = "E")
+      #scale_color_gradientn(colours = myColors2[c(1,3,5)])
+      scale_color_gradientn(colours = c('#d9d9d9','#f1d5d5','#b60202'))
+
+ggplot(sc_pca, aes(x = `PC1.63.3.`, y = `PC2.5.2.`, color = Gradient)) + 
+      geom_point(size = 3, alpha = 0.8) +
+      theme_prism(border = TRUE, base_rect_size = 2) +
+      xlab('PC1 (63.3%)') + ylab('PC2 (5.2%)') +
+      #viridis::scale_color_viridis(option = "E")
+      scale_color_manual(values = myColors2[c(1,3,5)])
+      #scale_color_gradientn(colours = c('#d9d9d9','#f1d5d5','#b60202'))
+
+ggplot(sc_pca, aes(x = `PC1.63.3.`, y = `PC2.5.2.`, color = Sample)) + 
+      geom_point(size = 3, alpha = 0.8) +
+      theme_prism(border = TRUE, base_rect_size = 2) +
+      xlab('PC1 (63.3%)') + ylab('PC2 (5.2%)') +
+      viridis::scale_color_viridis(option = "E",discrete = TRUE) +
+      theme(legend.position = 'none')
+
+```
+
+```{r}
+#UMAP plot
+ggplot(sc_umap, aes(x = UMAP1, y = UMAP2, color = MKI67)) + 
+      geom_point(size = 3, alpha = 0.8) +
+      theme_prism(border = TRUE, base_rect_size = 2) +
+      xlab('UMAP1') + ylab('UMAP2') +
+      #scale_color_manual(values = myColors2)
+      #viridis::scale_color_viridis(option = "E")
+      #scale_color_gradientn(colours = c('#d9d9d9','#f1d5d5','#7e0202'))
+      scale_color_gradientn(colours = c('#e0e0e0','#f1e6df', '#ff6200'))
+
+
+ggplot(sc_umap, aes(x = UMAP1, y = UMAP2, color = Gradient)) + 
+      geom_point(size = 3, alpha = 0.8) +
+      theme_prism(border = TRUE, base_rect_size = 2) +
+      xlab('UMAP1') + ylab('UMAP2') +
+      scale_color_manual(values = myColors2[c(1,3,5)])
+
+ggplot(sc_umap, aes(x = UMAP1, y = UMAP2, color = Sample)) + 
+      geom_point(size = 3, alpha = 0.8) +
+      theme_prism(border = TRUE, base_rect_size = 2) +
+      xlab('UMAP1') + ylab('UMAP2') +
+      viridis::scale_color_viridis(option = "E",discrete = TRUE) 
+```

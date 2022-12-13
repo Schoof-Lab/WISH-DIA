@@ -1,0 +1,114 @@
+## Evaluating peak widths and rentention-times of the uPAC Neo column (Figure 3)
+
+### Data and packages 
+
+```{r}
+library(tidyverse)
+library(ggprism)
+library(ggridges)
+myColors = c("#355070", '#6d597a', '#b56576', '#e56b6f', '#eaac8b')
+myColors2 = c("#5f0f40", '#9a031e', '#fb8b24', '#e36414', '#0f4c5c')
+```
+
+```{r}
+#Single column runs
+ng5_20min <- read.delim("data/ColumnEval/20min_5ng.xls", sep = "\t", dec = ",") %>% mutate(Gradient = "20min", Scheme = "Single-column", Load = "5ng") 
+ng5_26min <- read.delim("data/ColumnEval/26min_5ng.xls", sep = "\t", dec = ",") %>% mutate(Gradient = "26min", Scheme = "Single-column", Load = "5ng") 
+ng5_45min <- read.delim("data/ColumnEval/45min_5ng.xls", sep = "\t", dec = ",") %>% mutate(Gradient = "45min", Scheme = "Single-column", Load = "5ng") 
+
+#Pre-column runs
+ng5_32min <- read.delim("data/ColumnEval/32min_5ng.xls", sep = "\t", dec = ",") %>% mutate(Gradient = "32min", Scheme = "Pre-column", Load = "5ng") 
+ng5_52min <- read.delim("data/ColumnEval/52min_5ng.xls", sep = "\t", dec = ",") %>% mutate(Gradient = "52min", Scheme = "Pre-column", Load = "5ng") 
+
+#Merging data
+upac <- bind_rows(list(ng5_20min, ng5_26min, ng5_32min, ng5_45min, ng5_52min)) %>% as_tibble()
+
+```
+
+## Calculating the deviation of the Apex rentention time for each experiment
+```{r}
+apexRT <- upac %>% select(R.Replicate, EG.PrecursorId, EG.ApexRT, Scheme, Gradient, Load) %>% 
+                    group_by(Scheme, Gradient, EG.PrecursorId, Load) %>% 
+                    summarise(std = sd(EG.ApexRT * 60, na.rm = TRUE),
+                              meanRT = mean(EG.ApexRT, na.rm = TRUE)) 
+
+apexRT_deviation <- upac %>% select(R.Replicate, EG.PrecursorId, EG.ApexRT, Scheme, Gradient, Load) %>% 
+                    group_by(Scheme, Gradient, EG.PrecursorId, Load) %>% 
+                    mutate(RTdeviation = EG.ApexRT*60 - mean(EG.ApexRT*60, na.rm = TRUE)) 
+
+
+apexRT_stats <- apexRT_deviation %>% group_by(Scheme,Gradient, Load) %>% 
+    summarise(med = median(RTdeviation, na.rm = TRUE)) %>% 
+    mutate(x= 3, y = 0.5) 
+
+peak_fwhm <- upac %>% select(R.Replicate, EG.PrecursorId, EG.FWHM, Scheme, Gradient, Load) %>% 
+                    group_by(Scheme, Gradient, EG.PrecursorId, Load)
+
+peak_fwhm_stats <- peak_fwhm %>% group_by(Scheme,Gradient, Load) %>% 
+    summarise(med = median(EG.FWHM, na.rm = TRUE)) %>% 
+    mutate(x= 21, y = 0.2)
+```
+
+
+```{r}
+
+ggplot(peak_fwhm %>% filter(R.Replicate == 1, Scheme == "Single-column", Load == "5ng"), aes(x = EG.FWHM*60,fill = Gradient, color = Gradient)) + 
+        geom_histogram(aes(y = ..density..), binwidth = 1, alpha =0.7) +
+        geom_density(alpha = 0.1,size = 1) +
+        scale_fill_manual(values = myColors2) + 
+        scale_color_manual(values = myColors2) +
+        theme_prism() +
+        facet_grid(cols = vars(Gradient), rows = vars(Scheme)) +
+        xlim(c(-0,30)) +
+        theme(legend.position = "none") + 
+         geom_vline(data=peak_fwhm_stats %>% filter(Scheme == "Single-column", Load == "5ng"),  
+         aes(xintercept = med*60), color = myColors2[2], size = 0.9,linetype = "dashed") +
+         geom_text(data=peak_fwhm_stats %>% filter(Scheme == "Single-column", Load == "5ng"), 
+         aes(x=x, y=y, label = round(med*60,2)), size = 7) + 
+         xlab("Peak FWHM, s") + ylab("Density")
+
+ggplot(peak_fwhm %>% filter(R.Replicate == 3, Scheme == "Pre-column", Load == "5ng"), aes(x = EG.FWHM*60,fill = Gradient, color = Gradient)) + 
+        geom_histogram(aes(y = ..density..), binwidth = 1, alpha =0.7) +
+        geom_density(alpha = 0.1,size = 1) +
+        scale_fill_manual(values = myColors2) + 
+        scale_color_manual(values = myColors2) +
+        theme_prism() +
+        facet_grid(cols = vars(Gradient), rows = vars(Scheme)) +
+        xlim(c(0.1,30)) + ylim(c(0,0.37)) +
+        theme(legend.position = "none") + 
+         geom_vline(data=peak_fwhm_stats %>% filter(Scheme == "Pre-column", Load == "10ng"),  
+         aes(xintercept = med*60), color = myColors2[2], size = 0.9,linetype = "dashed") +
+         geom_text(data=peak_fwhm_stats %>% filter(Scheme == "Pre-column", Load == "10ng"), 
+         aes(x=x, y=y, label = round(med*60,2)), size = 7) + 
+         xlab("Peak FWHM, s") + ylab("Density")
+```
+
+
+```{r}
+ggplot(apexRT_deviation %>% filter(R.Replicate == 1, Scheme == "Pre-column", Load == "5ng"), aes(x = RTdeviation,fill = Gradient, color = Gradient)) + 
+        geom_histogram(aes(y = ..density..), binwidth = 0.5, alpha =0.7) +
+        #geom_density(alpha = 0.1,size = 1) +
+        scale_fill_manual(values = myColors2) + 
+        scale_color_manual(values = myColors2) +
+        theme_prism() +
+        facet_grid(cols = vars(Gradient), rows = vars(Scheme)) +
+        xlim(c(-6,6)) +
+        theme(legend.position ="none") +
+        xlab("RT deviation, s") + ylab("Density")
+
+ggplot(apexRT_deviation %>% filter(R.Replicate == 1, Scheme == "Single-column", Load == "5ng"), aes(x = RTdeviation,fill = Gradient, color = Gradient)) + 
+        geom_histogram(aes(y = ..density..), binwidth = .6, alpha =0.7) +
+        #geom_density(alpha = 0.1,size = 1) +
+        scale_fill_manual(values = myColors2) + 
+        scale_color_manual(values = myColors2) +
+        theme_prism() +
+        facet_grid(cols = vars(Gradient), rows = vars(Scheme)) +
+        xlim(c(-6,6)) +
+        theme(legend.position ="none") +
+        xlab("RT deviation, s") + ylab("Density")
+
+```
+
+
+```
+

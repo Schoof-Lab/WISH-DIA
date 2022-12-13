@@ -1,0 +1,185 @@
+# Visualization of identification summaries
+
+### This script is used to plot the data from summary statistics of SN16 searches 
+
+#### Packages and data
+```{r}
+source('summaryImport2.R')
+```
+
+#### Plot limits and colors 
+```{r}
+myColors = c("#355070", '#6d597a', '#b56576', '#e56b6f', '#eaac8b')
+myColors2 = c("#5f0f40", '#9a031e', '#fb8b24', '#e36414', '#0f4c5c')
+```
+### Ploting the Peptide and Protein numbers 
+
+#### uPAC single-column
+```{r}
+
+uPAC_singlecol_long <- uPAC_singlecol %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+            mutate(gradient = gsub("mins", "", gradient)) 
+
+uPAC_singlecol_summary_long <- uPAC_singlecol_summary %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+            mutate(gradient = gsub("mins", "", gradient)) 
+
+#Peptides 
+ylimits = c(0,35000)
+ggplot(uPAC_singlecol_long %>% filter(Values == "Peptides"), aes(x = gradient, y = Counts, fill = Load, color = Load, label = Counts)) + 
+    geom_bar(data = uPAC_singlecol_summary_long %>% filter(Values == "Peptides"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(cols = vars(Load)) +
+    geom_text(data = uPAC_singlecol_summary_long %>% filter(Values == "Peptides"), color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors) +
+    scale_color_manual(values = myColors) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(),
+             panel.spacing = unit(1.5, "lines")) + 
+    ylab('Peptides') + xlab("Method time, min") +
+    guides(fill=guide_legend(title="Load"))
+
+#Proteins
+ylimits = c(0,6500)
+ggplot(uPAC_singlecol_long %>% filter(Values == "Protein.Groups"), aes(x = gradient, y = Counts, fill = Load, color = Load, label = Counts)) + 
+    geom_bar(data = uPAC_singlecol_summary_long %>% filter(Values == "Protein.Groups"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(cols = vars(Load)) +
+    geom_text(data = uPAC_singlecol_summary_long %>% filter(Values == "Protein.Groups"), color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors) +
+    scale_color_manual(values = myColors) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(),
+             panel.spacing = unit(1.5, "lines")) + 
+    ylab('Protein groups') + xlab("Method time, min") +
+    guides(fill=guide_legend(title="Load"))
+```
+
+#### uPAC pre-column scheme
+
+```{r}
+
+uPAC_precol_long <- uPAC_precol %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+            mutate(Gradient = gsub("mins", "", Gradient)) 
+
+uPAC_precol_summary_long <- uPAC_precol_summary %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+            mutate(Gradient = gsub("mins", "", Gradient)) 
+
+#Peptides 
+ylimits = c(0,35000)
+ggplot(uPAC_precol_long %>% filter(Values == "Peptides"), aes(x = Gradient, y = Counts, fill = Load, color = Load, label = Counts)) + 
+    geom_bar(data = uPAC_precol_summary_long %>% filter(Values == "Peptides"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(cols = vars(Load)) +
+    geom_text(data = uPAC_precol_summary_long %>% filter(Values == "Peptides"), color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors) +
+    scale_color_manual(values = myColors) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(),
+             panel.spacing = unit(1.5, "lines")) + 
+    ylab('Peptides') + xlab("Method time, min") +
+    guides(fill=guide_legend(title="Load"))
+
+#Proteins
+ylimits = c(0,6500)
+ggplot(uPAC_precol_long %>% filter(Values == "Protein.Groups"), aes(x = Gradient, y = Counts, fill = Load, color = Load, label = Counts)) + 
+    geom_bar(data = uPAC_precol_summary_long %>% filter(Values == "Protein.Groups"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(cols = vars(Load)) +
+    geom_text(data = uPAC_precol_summary_long %>% filter(Values == "Protein.Groups"), color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors) +
+    scale_color_manual(values = myColors) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(),
+             panel.spacing = unit(1.5, "lines")) + 
+    ylab('Protein groups') + xlab("Method time, min") +
+    guides(fill=guide_legend(title="Load"))
+```
+
+# Single-cell runs with 96well 120k vs 240k 
+
+```{r}
+
+sc_96_long <- sc_96 %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+            mutate(gradient = gsub("mins", "", gradient)) 
+
+sc_96_summary_long <- sc_96_summary %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+            mutate(gradient = gsub("mins", "", gradient)) 
+
+#Peptides 
+ylimits = c(0,3000)
+ggplot(sc_96_long %>% filter(Values == "Peptides"), aes(x = resolution, y = Counts, fill = resolution, color = resolution, label = Counts)) + 
+    geom_bar(data = sc_96_summary_long %>% filter(Values == "Peptides"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(cols = vars(gradient)) +
+    geom_text(data = sc_96_summary_long %>% filter(Values == "Peptides"), color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors[2:5]) +
+    scale_color_manual(values = myColors[2:5]) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(),
+             panel.spacing = unit(1.5, "lines")) + 
+    ylab('Peptides') + xlab("MS resolution") +
+    guides(fill=guide_legend(title="Load"))
+
+#Proteins
+ylimits = c(0,1200)
+ggplot(sc_96_long %>% filter(Values == "Protein.Groups"), aes(x = resolution, y = Counts, fill = resolution, color = resolution, label = Counts)) + 
+    geom_bar(data = sc_96_summary_long %>% filter(Values == "Protein.Groups"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(cols = vars(gradient)) +
+    geom_text(data = sc_96_summary_long %>% filter(Values == "Protein.Groups"), color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors[2:5]) +
+    scale_color_manual(values = myColors[2:5]) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(),
+             panel.spacing = unit(1.5, "lines")) + 
+    ylab('Protein groups') + xlab("MS resolution") +
+    guides(fill=guide_legend(title="Load"))
+```
+
+```{r}
+
+sc_test_long <- sc_test %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+            mutate(gradient = gsub("mins", "", gradient)) 
+
+sc_test_summary_long <- sc_test_summary %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% 
+            mutate(gradient = gsub("mins", "", gradient)) 
+
+#Peptides 
+ylimits = c(0,5000)
+ggplot(sc_test_long %>% filter(Values == "Peptides", resolution != "120k"), aes(x = injection, y = Counts, fill = injection, color = injection, label = Counts)) + 
+    geom_bar(data = sc_test_summary_long %>% filter(Values == "Peptides", resolution != "120k"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(cols = vars(gradient)) +
+    geom_text(data = sc_test_summary_long %>% filter(Values == "Peptides", resolution != "120k"), color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors[2:5]) +
+    scale_color_manual(values = myColors[2:5]) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", axis.text.x = element_text(angle = 45),legend.title = , axis.ticks.x = element_blank(),
+             panel.spacing = unit(1.5, "lines")) + 
+    ylab('Peptides') + xlab("Injection type") +
+    guides(fill=guide_legend(title="Load"))
+
+#Proteins
+ylimits = c(0,1500)
+ggplot(sc_test_long %>% filter(Values == "Protein.Groups", resolution != "120k"), aes(x = injection, y = Counts, fill = injection, color = injection, label = Counts)) + 
+    geom_bar(data = sc_test_summary_long %>% filter(Values == "Protein.Groups", resolution != "120k"), stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(cols = vars(gradient)) +
+    geom_text(data = sc_test_summary_long %>% filter(Values == "Protein.Groups", resolution != "120k"), color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors[2:5]) +
+    scale_color_manual(values = myColors[2:5]) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.text.x = element_text(angle = 45), axis.ticks.x = element_blank(),
+             panel.spacing = unit(1.5, "lines")) + 
+    ylab('Protein groups') + xlab("Injection type") +
+    guides(fill=guide_legend(title="Load"))
+
+```

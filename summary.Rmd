@@ -1,0 +1,88 @@
+# Visualization of identification summaries
+
+### This script is used to plot the data from summary statistics of SN16 searches 
+
+#### Packages and data
+```{r}
+source('summaryImport.R')
+```
+
+#### Plot limits and colors 
+```{r}
+ylimits = c(0,22000) # sets the range of the y axis so the difference between grandients are easier to appreciate
+myColors = c("#355070", '#6d597a', '#b56576', '#e56b6f', '#eaac8b')
+myColors2 = c("#5f0f40", '#9a031e', '#fb8b24', '#e36414', '#0f4c5c')
+```
+### Ploting the Peptide and Protein numbers 
+
+#### DIA window optimization 
+
+```{r}
+#Converting the dataframes to long format
+window_size_long <- window_size %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% filter(injectionTime == "auto",  MS2_type == "OT", Values == "Protein.Groups")
+window_size_summary_long <- window_size_summary %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% filter(injectionTime == "auto", MS2_type == "OT", Values == "Protein.Groups")
+
+#Generating the plot 
+ylimits = c(0,5000) 
+ggplot(window_size_long, aes(x = window_size, y = Counts, fill = Load, color = Load, label = Counts)) + 
+    geom_bar(data = window_size_summary_long, stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(col = vars(Values), row = vars(Load)) +
+    geom_text(data = window_size_summary_long, color = "black", vjust = -0.9,  fontface = "bold")+
+    scale_fill_manual(values = myColors) +
+    scale_color_manual(values = myColors) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(), 
+          axis.text.x = element_text(angle = 45), panel.spacing = unit(1, "lines")) + 
+    ylab('Counts') + xlab("Isolation window size, m/z") +
+    guides(fill=guide_legend(title="Load"))
+```
+
+#### HRMS1 method application
+
+```{r}
+ylimits = c(0,3000) 
+#Converting the dataframes to long format
+hrms1_long <- hrms1 %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% filter(MS2_type == "OT", Values == 'Protein.Groups')
+hrms1_summary_long <- hrms1_summary %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% filter(MS2_type == "OT", Values == "Protein.Groups")
+
+#Generating the plot 
+
+ggplot(hrms1_long, aes(x = method, y = Counts, fill = method, color = method, label = Counts)) + 
+    geom_bar(data = hrms1_summary_long, stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    facet_grid(col = vars(Values), row = vars(MS2_type)) +
+    geom_text(data = hrms1_summary_long, color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors2) +
+    scale_color_manual(values = myColors2) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "right", legend.title = , axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 90)) + 
+    ylab('Count') + xlab("") +
+    guides(fill=guide_legend(title="Load"))
+```
+
+#### HRMS1 method window size optimization 
+
+```{r}
+ylimits = c(0,3000) 
+#Converting the dataframes to long format
+hrms1_win_long <- hrms1_win %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups)  %>% filter(Values == "Protein.Groups")
+hrms1_win_summary_long <- hrms1_win_summary %>% gather(key = 'Values', 'Counts',  Precursors:Protein.Groups) %>% filter(Values == "Protein.Groups")
+
+#Generating the plot 
+
+ggplot(hrms1_win_long, aes(x = window_size, y = Counts, fill = method, color = method, label = Counts))+ 
+    geom_bar(data = hrms1_win_summary_long, stat = "identity", position= "dodge", alpha =0.6, show.legend = FALSE) +
+    geom_jitter(width=0.2, height = 0, size = 4, alpha =.7) +
+    geom_text(data = hrms1_win_summary_long, color = "black", vjust = -0.9, fontface = "bold")+
+    scale_fill_manual(values = myColors2[1:4]) +
+    scale_color_manual(values = myColors2[1:4]) +
+    theme_prism()+
+    scale_y_continuous(guide = "prism_offset", expand = c(0,0),limits = ylimits) +
+    theme(legend.position =  "none", legend.title = , axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 45)) + 
+    ylab('Count') + xlab("") +
+    guides(fill=guide_legend(title="Load")) +
+    facet_wrap(~method, ncol = 2, scales = "free_x")
+```

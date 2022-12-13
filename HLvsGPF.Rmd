@@ -1,0 +1,253 @@
+# Analysis of Hela heavy and light mix for accuracy estimation 
+
+#### Packages
+```{r}
+library(tidyverse)
+library(ggprism)
+library(ggridges)
+library(viridis)
+
+myColors2 = c("#5f0f40", '#9a031e', '#fb8b24', '#e36414', '#0f4c5c')
+myColors = c("#355070", '#6d597a', '#b56576', '#e56b6f', '#eaac8b')
+```
+
+#### Data
+```{r}
+#Reading data in a bad way 
+direct11 <- read.csv('data/SILAC/R13/R13-11-direct.xls', sep = "\t", dec = ",") %>% as_tibble()
+direct12 <- read.csv('data/SILAC/R13/R13-12-direct.xls', sep = "\t", dec = ",") %>% as_tibble()
+direct15 <- read.csv('data/SILAC/R13/R13-15-direct.xls', sep = "\t", dec = ",") %>% as_tibble()
+
+hl11 <- read.csv('data/SILAC/R13/R13-11-HL.xls', sep = "\t", dec = ",") %>% as_tibble()
+hl12 <- read.csv('data/SILAC/R13/R13-12-HL.xls', sep = "\t", dec = ",") %>% as_tibble()
+hl15 <- read.csv('data/SILAC/R13/R13-15-HL.xls', sep = "\t", dec = ",") %>% as_tibble()
+
+gpf11 <- read.csv('data/SILAC/R13/R13-11-GPF.xls', sep = "\t", dec = ",") %>% as_tibble()
+gpf12 <- read.csv('data/SILAC/R13/R13-12-GPF.xls', sep = "\t", dec = ",") %>% as_tibble()
+gpf15 <- read.csv('data/SILAC/R13/R13-15-GPF.xls', sep = "\t", dec = ",") %>% as_tibble()
+```
+
+## Rename columns 
+```{r}
+#Function for quickly changing the columns of all the files 
+renameColumns <- function(df){
+    temp <- df
+    mix <- str_match(colnames(temp), pattern = "Mix(.+?)_")[,2]
+    quant <- str_match(colnames(temp), pattern = "MS.Channel.*")
+    replicate <- str_match(colnames(temp), pattern = "(.)\\.raw")[,2]
+
+    new_colnames <- c("Accessions", paste(paste(mix, quant, sep = "."), replicate, sep = ".")[2:25])
+    colnames(temp) <- new_colnames
+    temp
+    }
+#Applying the functions 
+
+#1ng 
+direct11 <- renameColumns(direct11)
+direct12 <- renameColumns(direct12)
+direct15 <- renameColumns(direct15)
+
+hl11 <- renameColumns(hl11)
+hl12 <- renameColumns(hl12)
+hl15 <- renameColumns(hl15)
+
+gpf11 <- renameColumns(gpf11)
+gpf12 <- renameColumns(gpf12)
+gpf15 <- renameColumns(gpf15)
+
+```
+## Extract MS1 info
+```{r}
+#Extracts the MS1 quant information and converts it into long format for plotting and further analysis
+extractMS1 <- function(df){
+    #df - dataframe from the renameColumns function
+    #Separate MS1 and MS2 based quant 
+    prot_ms1 <- df[grepl("Accessions|MS1Channel", colnames(df))]
+    #Convert to long format
+    prot_ms1 <- prot_ms1 %>% gather(Run, Abundance, -Accessions) %>% 
+            separate(Run, c("Mix", "Quant", "Replicate"), sep = "\\.") %>% 
+            group_by(Mix, Quant) %>% filter(!(Abundance %in% c("1", "Filtered", "NaN"))) %>% 
+            mutate(Abundance = as.numeric(gsub(",", "\\.", Abundance)))
+    prot_ms1
+    }
+
+direct11_ms1 <- extractMS1(direct11)
+direct12_ms1 <- extractMS1(direct12)
+direct15_ms1 <- extractMS1(direct15)
+
+hl11_ms1 <- extractMS1(hl11)
+hl12_ms1 <- extractMS1(hl12)
+hl15_ms1 <- extractMS1(hl15)
+
+gpf11_ms1 <- extractMS1(gpf11)
+gpf12_ms1 <- extractMS1(gpf12)
+gpf15_ms1 <- extractMS1(gpf15)
+
+direct_ms1 <- bind_rows(list(direct11_ms1, direct12_ms1, direct15_ms1))
+hl_ms1 <- bind_rows(list(hl11_ms1, hl12_ms1, hl15_ms1))
+gpf_ms1 <- bind_rows(list(gpf11_ms1, gpf12_ms1, gpf15_ms1))
+```
+
+
+## Calculate logFC and CV (not used)
+
+```{r}
+#Calculating the logFC in values 
+calculateStatsMS1 <- function(df){
+    prot_ms1 <- df
+    prot_means <- prot_ms1 %>% group_by(Accessions, Mix, Quant) %>% 
+        summarise(avg = log2(mean(Abundance)))
+
+    #prot_cv <- prot_ms1 %>% group_by(Accessions, Method, Mix, Quant) %>% 
+    #    summarise(cv = sd(Abundance)/mean(Abundance))
+
+    prot_FC_ms1 <- prot_means %>% spread(Quant, avg) %>% mutate(logFC = MS1Channel2 - MS1Channel1) %>% 
+                mutate(Mix = case_when(Mix == "11" ~ "1:1",
+                                       Mix == "12" ~ "1:2",
+                                       Mix == "15" ~ "1:5"
+                                       ))
+    
+    prot_FC_ms1
+}
+
+#1ng 
+direct_fc_ms1 <- calculateStatsMS1(direct_ms1) %>% mutate(Quant = "Direct")
+hl_fc_ms1 <- calculateStatsMS1(hl_ms1) %>% mutate(Quant = "HL")
+gpf_fc_ms1 <- calculateStatsMS1(gpf_ms1) %>% mutate(Quant = "GPF")
+
+
+```
+
+### Calculate summaries to be added to the plots 
+```{r}
+direct_labels <-  direct_fc_ms1 %>% group_by( Mix, Quant) %>% 
+    summarise(mu = mean(logFC, na.rm = TRUE), std = sd(logFC, na.rm =TRUE)) 
+```
+
+### Comparing proteins that are found with directDIA
+
+### Total quant 
+
+```{r}
+data <- bind_rows(list(direct_fc_ms1, hl_fc_ms1, gpf_fc_ms1)) %>% mutate(Quant = factor(Quant, levels = c("Direct", "HL", "GPF")))
+expected_ratios <- data.frame(X = rep(c("Direct", "HL", "GPF"),3), Z = rep(log2(c(1,2,5)),3), Mix = rep(c("1:1", "1:2", "1:5"),3))
+ggplot(data, aes(x=logFC, color = Mix, fill = Mix)) +
+        geom_density(alpha = .6) +
+        facet_grid(rows=vars(Quant)) +
+        scale_color_manual(values = myColors2) +
+        scale_fill_manual(values = myColors2) + 
+        xlim(c(-1.5,4)) + ylim(c(-0,2)) +
+        theme_prism() +
+        geom_vline(data = expected_ratios, aes(xintercept = Z, color = Mix),linetype = "dashed", size = .8) +
+        geom_hline(yintercept = 0.8, linetype = "dashed", color = "grey30", size = .5) +
+        theme(legend.position = "none") + ylab("Density") + xlab("Log2(L:H)")
+
+
+```
+
+### direct quant
+```{r}
+#Makes list of directDIA proteins for each mix
+#Filter out the dataframes for proteis that are not found by directDIA
+hl_fc_ms1_direct <- inner_join(hl_fc_ms1, direct_fc_ms1, by = c("Accessions", "Mix")) %>% select(1:6) %>% mutate(detection = "Direct")
+colnames(hl_fc_ms1_direct) <- gsub("\\.x", "", colnames(hl_fc_ms1_direct))
+gpf_fc_ms1_direct <- inner_join(gpf_fc_ms1, direct_fc_ms1, by = c("Accessions", "Mix")) %>% select(1:6) %>% mutate(detection = "Direct")
+colnames(gpf_fc_ms1_direct) <- gsub("\\.x", "", colnames(gpf_fc_ms1_direct))
+```
+
+```{r}
+data <- bind_rows(list(direct_fc_ms1, hl_fc_ms1_direct, gpf_fc_ms1_direct)) %>% mutate(Quant = factor(Quant, levels = c("Direct", "HL", "GPF")))
+expected_ratios <- data.frame(X = rep(c("Direct", "HL", "GPF"),3), Z = rep(log2(c(1,2,5)),3), Mix = rep(c("1:1", "1:2", "1:5"),3))
+ggplot(data, aes(x=logFC, color = Mix, fill = Mix)) +
+        geom_density(alpha = .6) +
+        facet_grid(rows=vars(Quant)) +
+        scale_color_manual(values = myColors2) +
+        scale_fill_manual(values = myColors2) + 
+        xlim(c(-1.5,4)) + ylim(c(-0,2)) +
+        theme_prism() +
+        geom_vline(data = expected_ratios, aes(xintercept = Z, color = Mix),linetype = "dashed", size = .8) +
+        geom_hline(yintercept = 0.8, linetype = "dashed", color = "grey30", size = .5) +
+        geom_hline(yintercept = 1.9, linetype = "dashed", color = "grey30", size = .5) +
+        geom_hline(yintercept = 1.45, linetype = "dashed", color = "grey30", size = .5) +
+        theme(legend.position = "none") + ylab("Density") + xlab("Log2(L:H)")
+```
+
+
+### Gain quant
+
+```{r}
+#Makes list of directDIA proteins for each mix
+#Filter out the dataframes for proteis that are found by directDIA
+hl_fc_ms1_gain <- anti_join(hl_fc_ms1, direct_fc_ms1, by = c("Accessions", "Mix")) %>% select(1:6) %>% mutate(detection = "Gain")
+colnames(hl_fc_ms1_gain) <- gsub("\\.x", "", colnames(hl_fc_ms1_gain))
+gpf_fc_ms1_gain <- anti_join(gpf_fc_ms1, direct_fc_ms1, by = c("Accessions", "Mix")) %>% select(1:6) %>% mutate(detection = "Gain")
+colnames(gpf_fc_ms1_gain) <- gsub("\\.x", "", colnames(gpf_fc_ms1_gain))
+```
+
+```{r}
+data <- bind_rows(list(hl_fc_ms1_gain, gpf_fc_ms1_gain, direct_fc_ms1)) %>% mutate(Quant = factor(Quant, levels = c("Direct", "HL", "GPF")))
+expected_ratios <- data.frame(X = rep(c("Direct", "HL", "GPF"),3), Z = rep(log2(c(1,2,5)),3), Mix = rep(c("1:1", "1:2", "1:5"),3))
+ggplot(data, aes(x=logFC, color = Mix, fill = Mix)) +
+        geom_density(alpha = .6) +
+        facet_grid(rows=vars(Quant)) +
+        scale_color_manual(values = myColors) +
+        scale_fill_manual(values = myColors) + 
+        xlim(c(-1.5,4)) + ylim(c(-0,2)) +
+        theme_prism() +
+        geom_vline(data = expected_ratios, aes(xintercept = Z, color = Mix),linetype = "dashed", size = .8) +
+        geom_hline(yintercept = 0.8, linetype = "dashed", color = "grey30", size = .5) +
+        theme(legend.position = "none") + ylab("Density") + xlab("Log2(L:H)")
+```
+
+### Abundance distribution dependency
+```{r}
+#Check the abundance correlation with gained proteins
+hl <- bind_rows(hl_fc_ms1_direct, hl_fc_ms1_gain) %>% mutate(library = "HL")
+gpf <- bind_rows(gpf_fc_ms1_direct, gpf_fc_ms1_gain) %>% mutate(library = "GPF")
+
+libraries <- bind_rows(hl, gpf)
+```
+
+```{r}
+
+ggplot(libraries %>% filter(Mix == "1:1"), aes(x = MS1Channel1, color = detection, fill= detection)) + 
+      geom_histogram(alpha = 0.6, position = "identity") +
+      facet_wrap(~library) +
+      theme_prism() +
+      scale_fill_manual(values = myColors[c(2,4)]) +
+      scale_color_manual(values = myColors[c(2,4)]) +
+      ylab("Counts") + xlab("log2(MS1 Intensity - Heavy)") +
+      theme(legend.position = "top") #+
+      #geom_vline(xintercept = 6, color = "black", linetype = "dashed") +
+      #geom_vline(xintercept = 12, color = "black", linetype = "dashed")
+    
+```
+
+
+```{r}
+#Deviation dependency on abundance 
+ggplot(libraries %>% filter(MS1Channel1 < 14 & MS1Channel1 > 5, Mix == "1:1"), aes(x = logFC, y = MS1Channel1)) +
+        geom_hex() +
+        facet_wrap(~library + detection) + 
+        theme_prism() +
+        #viridis::scale_fill_viridis(option = "E") 
+        scale_fill_gradientn(colours = c("#355070", "#6d597a", "#b56576", "#e56b6f", "#eaac8b")) +
+        xlab("log2(L:H)") +
+        xlim(c(-6,6))
+```
+
+
+```{r}
+inBoth <- libraries %>% group_by(Mix) %>% count(Accessions) %>% filter(n == 2)
+libraries2 <- inner_join(libraries, inBoth, by = c("Accessions", "Mix"))
+
+ggplot(libraries2 %>% filter(MS1Channel1 < 14 & MS1Channel1 > 6, Mix == "1:2"), aes(x = logFC, y = MS1Channel1)) +
+        geom_hex() +
+        facet_wrap(~library + detection) + 
+        theme_prism() +
+        #viridis::scale_fill_viridis(option = "E") 
+        scale_fill_gradientn(colours = c("#355070", "#6d597a", "#b56576", "#e56b6f", "#eaac8b")) +
+        xlab("log2(L:H)") +
+        xlim(c(-6,6))
+
+```

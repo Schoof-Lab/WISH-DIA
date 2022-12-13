@@ -1,0 +1,133 @@
+## Points per peak and precision analysis for different DIA windows (Figure 1)
+
+### Data and packages 
+
+```{r}
+library(tidyverse)
+library(ggprism)
+library(ggridges)
+library(data.table)
+source('helperFunctions.R')
+myColors = c("#355070", '#6d597a', '#b56576', '#e56b6f', '#eaac8b')
+```
+
+```{r}
+#Reading the LongReportV2 tables from SN16
+
+#Read all files into one 
+#all_runs <- paste("data/window_ppp/",list.files(path = "data/window_ppp/", pattern = "*.tsv"), sep = "") %>% 
+#        map_df(~read_tsv(.x)) %>% mutate(`PG.Qvalue` = as.character(`PG.Qvalue`)) # an error with the column types keeps this from working 
+
+#Will have to do this manually... 
+
+extractInfo <- function(df){
+
+    temp <- df %>% 
+           mutate(Load = factor(str_match(R.FileName, pattern = "45_(.+)_")[,2]),
+                   window_size = factor(str_match(R.FileName, pattern = "w_(.+?)_")[,2]), 
+                   window_number = factor(str_match(R.FileName, pattern = "DIA_(.+?)_")[,2]),
+                   resolution = factor(str_match(R.FileName, pattern = "mz_(.+?)_")[,2]),
+                   injectionTime = factor(str_match(R.FileName, pattern = "_(.{1,6})_1CV")[,2]), # need to limit the amount of characters as lazy matching does not seem to work from end 
+                   MS2_type = factor(str_match(R.FileName, pattern ="40SPD_(.+?)-")[,2])) 
+    temp
+}
+
+dia10_1 <- fread("data/window_ppp/OT-DIA_40w_10mz_15k_1ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia10_5 <- fread("data/window_ppp/OT-DIA_40w_10mz_15k_5ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia10_10 <- fread("data/window_ppp/OT-DIA_40w_10mz_15k_10ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia10_100 <- fread("data/window_ppp/OT-DIA_40w_10mz_15k_100ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+
+dia20_1 <- fread("data/window_ppp/OT-DIA_20w_30k_1ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia20_5 <- fread("data/window_ppp/OT-DIA_20w_30k_5ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia20_10 <- fread("data/window_ppp/OT-DIA_20w_30k_10ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia20_100 <- fread("data/window_ppp/OT-DIA_20w_30k_100ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+
+dia40_1 <- fread("data/window_ppp/OT-DIA_10w_60k_1ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia40_5 <- fread("data/window_ppp/OT-DIA_10w_60k_5ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia40_10 <- fread("data/window_ppp/OT-DIA_10w_60k_10ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia40_100 <- fread("data/window_ppp/OT-DIA_10w_60k_100ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+ 
+dia80_1 <- fread("data/window_ppp/OT-DIA_5w_120k_1ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia80_5 <- fread("data/window_ppp/OT-DIA_5w_120k_5ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia80_10 <- fread("data/window_ppp/OT-DIA_5w_120k_10ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia80_100 <- fread("data/window_ppp/OT-DIA_5w_120k_100ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+
+dia100_1 <- fread("data/window_ppp/OT-DIA_4w_120k_1ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia100_5 <- fread("data/window_ppp/OT-DIA_4w_120k_5ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia100_10 <- fread("data/window_ppp/OT-DIA_4w_120k_10ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+dia100_100 <- fread("data/window_ppp/OT-DIA_4w_120k_100ng.tsv", dec = ",", sep = "\t") %>% as_tibble() %>% extractInfo()
+
+#Please do not judge me based on this code chuck. Hey, at least i used a function that does the extraction
+
+#Combining into one dataframe
+
+dia <- bind_rows(list(dia10_1, dia10_5, dia10_10, dia10_100,
+                      dia20_1, dia20_5, dia20_10, dia20_100,
+                      dia40_1, dia40_5, dia40_10, dia40_100,
+                      dia80_1, dia80_5, dia80_10, dia80_100,
+                      dia100_1, dia100_5, dia100_10, dia100_100
+)) %>% mutate(window_size = gsub("var-mz", "100mz", window_size),
+                          window_size = factor(window_size, levels = c("10mz", "20mz", "40mz", "80mz", "100mz")),
+                          Load = factor(Load, levels = c('100ng', '10ng', '5ng', '1ng')))
+                          
+```
+
+
+```{r}
+#Calculate the points per peak and covariates for labels
+ppp <- dia %>% select(R.Replicate, EG.DatapointsPerPeak, "EG.DatapointsPerPeak (MS1)", Load, window_size)
+
+ppp_labels <- ppp %>% group_by(R.Replicate, Load, window_size) %>% 
+    summarise(medPPP = median(EG.DatapointsPerPeak, na.rm = TRUE)) %>% 
+    mutate(x= 15, y = 0.15)
+
+```
+
+
+```{r}
+ggplot(ppp %>% filter(R.Replicate == 1), aes(x = EG.DatapointsPerPeak, fill = Load, color = Load)) + 
+        geom_histogram(aes(y = ..density..), binwidth = 1, alpha =0.7) +
+        geom_density(alpha = 0.1,size = 1) +
+        facet_grid(cols=vars(Load), rows = vars(window_size)) + 
+        #geom_vline(xintercept = 4.5, linetype ="dashed", size = 0.9, color = "#262525") + 
+        geom_vline(data = ppp_labels %>% filter(R.Replicate == 1), aes(xintercept = medPPP), color = "grey50", size = 0.9,linetype = "dashed") +
+        scale_fill_manual(values = myColors) + 
+        scale_color_manual(values = myColors) +
+        theme_prism() +
+        theme(legend.position = "none", axis.text.x = element_text(angle = 90)) +
+        xlim(c(0,20)) +
+        xlab('MS2 Datapoints per peak') + ylab("Density") +
+        geom_text(data = ppp_labels %>% filter(R.Replicate == 1), aes(x=x, y=y, label = medPPP), size = 7)
+```
+
+### Precision calculation 
+
+```{r}
+# CV calculate 
+prec_pg <- dia %>% distinct() %>% select(-R.Replicate) %>% 
+                      group_by(Load, window_size, PG.ProteinAccessions) %>% 
+                      summarise(std_ms1 = sd(PG.MS1Quantity), std_ms2 = sd(PG.MS2Quantity),
+                                abundance_ms1 = mean(PG.MS1Quantity), abundance_ms2 = mean(PG.MS2Quantity),
+                                cv_ms1 = std_ms1/abundance_ms1, cv_ms2 = std_ms2/abundance_ms2) %>% na.omit()
+
+
+prec_labels <- prec_pg %>% group_by(Load, window_size) %>% 
+    summarise(medCV_ms2 = median(cv_ms2, na.rm = TRUE)) %>% 
+    mutate(x= 15, y = 0.15)
+```
+
+```{r}
+ggplot(prec_pg , 
+        aes(x = cv_ms2, color = Load, fill = Load)) + 
+        geom_histogram(aes(y=..density..),bins = 30, alpha = .7) +
+        geom_density(alpha = 0.1,size = 1) +
+        #geom_density_ridges(stat = "binline", bins = 20, scale = 0.95, draw_baseline = FALSE, alpha = 0.7) +
+        facet_grid(cols = vars(Load), rows = vars(window_size) ) +
+        theme_prism() +
+        scale_fill_manual(values = myColors) + 
+        scale_color_manual(values = myColors) +
+        theme(legend.position = "none", axis.text.x =element_text(angle =45)) +
+        xlab('CV') + ylab("Density") +
+        xlim(c(0,0.2)) +
+        geom_vline(data = prec_labels, aes(xintercept = medCV_ms2, color = Load), size = 0.9,linetype = "dashed") 
+```

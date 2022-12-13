@@ -1,0 +1,208 @@
+## Peptide quantification accuracy plots for DIA vs HRMS1-DIA with different widnow sizes
+
+### Data and packages 
+
+```{r}
+library(tidyverse)
+library(ggprism)
+library(ggridges)
+myColors2 = c("#5f0f40", '#9a031e', '#fb8b24', '#e36414', '#0f4c5c')
+```
+
+```{r}
+#Reading the LongReportV2 tables from SN16
+
+paramCols <- c("Method", "res_ms1", "res_ms2", "window_nr", "window_size")
+
+dia15mz <- read.csv("data/R7_reports/DIA_120k_15k_40w_15mz.tsv", sep = "\t", dec = ",") %>% mutate(method = "DIA-120k-15k-40w-15mz") %>% separate(method, into = paramCols, sep = "-")
+dia30mz <- read.csv("data/R7_reports/DIA_120k_30k_20w_30mz.tsv", sep = "\t", dec = ",") %>% mutate(method = "DIA-120k-30k-20w-30mz") %>% separate(method, into = paramCols, sep = "-")
+dia60mz <- read.csv("data/R7_reports/DIA_120k_60k_10w_60mz.tsv", sep = "\t", dec = ",") %>% mutate(method = "DIA-120k-60k-10w-60mz") %>% separate(method, into = paramCols, sep = "-")
+dia120mz <- read.csv("data/R7_reports/DIA_120k_120k_5w_120mz.tsv", sep = "\t", dec = ",") %>% mutate(method = "DIA-120k-60k-10w-120mz") %>% separate(method, into = paramCols, sep = "-")
+
+hrms10mz <- read.csv("data/R7_reports/HRMS1_120k_30k_60w_10mz.tsv", sep = "\t", dec = ",") %>% mutate(method = "HRMS1-120k-30k-60w-10mz") %>% separate(method, into = paramCols, sep = "-")
+hrms20mz <- read.csv("data/R7_reports/HRMS1_120k_60k_30w_20mz.tsv", sep = "\t", dec = ",") %>% mutate(method = "HRMS1-120k-60k-30w-20mz") %>% separate(method, into = paramCols, sep = "-")
+hrms40mz <- read.csv("data/R7_reports/HRMS1_120k_120k_15w_40mz.tsv", sep = "\t", dec = ",") %>% mutate(method = "HRMS1-120k-120k-15w-40mz") %>% separate(method, into = paramCols, sep = "-")
+hrms100mz <- read.csv("data/R7_reports/HRMS1_240k_240k_6w_100mz.tsv", sep = "\t", dec = ",") %>% mutate(method = "HRMS1-240k-240k-6w-100mz") %>% separate(method, into = paramCols, sep = "-")
+```
+
+## Point per peak analysis 
+
+#### Extracting points per peak
+```{r}
+#Points per peak plots 
+
+ppp <- bind_rows(list(dia15mz    %>% select(R.Replicate, EG.DatapointsPerPeak, 'EG.DatapointsPerPeak..MS1.', Method:window_size),
+                      dia30mz  %>% select(R.Replicate, EG.DatapointsPerPeak, 'EG.DatapointsPerPeak..MS1.', Method:window_size),
+                      dia60mz   %>% select(R.Replicate, EG.DatapointsPerPeak, 'EG.DatapointsPerPeak..MS1.', Method:window_size),
+                      dia120mz %>% select(R.Replicate, EG.DatapointsPerPeak, 'EG.DatapointsPerPeak..MS1.', Method:window_size),
+                      hrms10mz %>% select(R.Replicate, EG.DatapointsPerPeak, 'EG.DatapointsPerPeak..MS1.', Method:window_size),
+                      hrms20mz %>% select(R.Replicate, EG.DatapointsPerPeak, 'EG.DatapointsPerPeak..MS1.', Method:window_size),
+                      hrms40mz %>% select(R.Replicate, EG.DatapointsPerPeak, 'EG.DatapointsPerPeak..MS1.', Method:window_size),
+                      hrms100mz %>% select(R.Replicate, EG.DatapointsPerPeak, 'EG.DatapointsPerPeak..MS1.', Method:window_size)
+)) %>%  mutate(window_size = factor(window_size, levels =c("10mz", "15mz", "20mz", "30mz", "40mz", "60mz", "100mz", "120mz")))
+
+colnames(ppp) <- c("Rep", "MS2", "MS1", paramCols[1:5])
+
+
+ppp_labels <- ppp %>% group_by(window_size) %>% 
+    summarise(medPPP = median(MS1, na.rm = TRUE)) %>% 
+    mutate(x= 15, y = 0.15)
+```
+
+```{r}
+col_dia <- c('#9a031e', '#a01f37', '#a1384c', '#b15f6e')
+col_hrms1 <- c('#e36414', '#e1732f', '#db8a58', '#e1ab8a')
+
+ggplot(ppp %>% filter(Rep == 1, Method == "HRMS1"), aes(x = MS1, fill = window_size, color = window_size)) + 
+        geom_histogram(aes(y = ..density..), binwidth = 1, alpha =0.7) +
+        geom_density(alpha = 0.1,size = 1) +
+        facet_grid(cols=vars(Method), rows=vars(window_size), drop = TRUE, scales = "free") + 
+        geom_vline(xintercept = 3.5, linetype ="dashed", size = 0.7, color = "grey") + 
+        scale_fill_manual(values = col_hrms1) + 
+        scale_color_manual(values = col_hrms1) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlim(c(0,15)) + ylim(c(0,0.45)) +
+        xlab('MS1 Datapoints per peak') + ylab("Density")
+
+ggplot(ppp %>% filter(Method == "DIA"), aes(x = MS1, fill = window_size, color = window_size)) + 
+        geom_histogram(aes(y = ..density..), binwidth = 1, alpha =0.7) +
+        geom_density(alpha = 0.1,size = 1) +
+        facet_grid(cols=vars(Method), rows=vars(window_size), drop = TRUE, scales = "free") + 
+        geom_vline(xintercept = 3.5, linetype ="dashed", size = 0.7, color = "grey") + 
+        scale_fill_manual(values = col_dia) + 
+        scale_color_manual(values = col_dia) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlim(c(0,15)) + ylim(c(0,0.6)) +
+        xlab('MS1 Datapoints per peak') + ylab("Density")
+```
+
+## Precision (CV) evaluation with each setting 
+
+```{r}
+prec_pg <- bind_rows(list(
+                      dia15mz    %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      dia30mz  %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      dia60mz   %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      dia120mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      hrms10mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      hrms20mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      hrms40mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      hrms100mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size)
+                      )) %>% distinct() %>% select(-R.Replicate) %>% 
+                      group_by(Method, window_size, PG.ProteinAccessions) %>% 
+                      summarise(std_ms1 = sd(PG.MS1Quantity), std_ms2 = sd(PG.MS2Quantity),
+                                abundance_ms1 = mean(PG.MS1Quantity), abundance_ms2 = mean(PG.MS2Quantity),
+                                cv_ms1 = std_ms1/abundance_ms1, cv_ms2 = std_ms2/abundance_ms2) %>% na.omit() %>% 
+                    mutate(window_size = factor(window_size, levels =c("10mz", "15mz", "20mz", "30mz", "40mz", "60mz", "100mz", "120mz")))
+
+#Get list of common detected peptides in the methods 
+
+if (FALSE){ # Excluded the lowest injection time methods as they have few quantified proteins
+detected_in_all <- Reduce(intersect, list(dia15mz$PG.ProteinAccessions,
+                                          dia30mz$PG.ProteinAccessions,
+                                          dia60mz$PG.ProteinAccessions,
+                                          dia120mz$PG.ProteinAccessions,
+                                          hrms10mz$PG.ProteinAccessions,
+                                          hrms20mz$PG.ProteinAccessions,
+                                          hrms40mz$PG.ProteinAccessions,
+                                          hrms100mz$PG.ProteinAccessions
+                                          ))
+} else {
+detected_in_all <- Reduce(intersect, list(
+                                          dia30mz$PG.ProteinAccessions,
+                                          dia60mz$PG.ProteinAccessions,
+                                          hrms20mz$PG.ProteinAccessions,
+                                          hrms40mz$PG.ProteinAccessions,
+                                          dia120mz$PG.ProteinAccessions,
+                                          hrms100mz$PG.ProteinAccessions
+                                          ))
+
+}
+
+
+
+prec_pg_common <- prec_pg %>% filter(PG.ProteinAccessions %in% detected_in_all)
+
+prec_pg_common %>% summarise(b10 = sum(cv_ms1 < 0.1))
+```
+
+```{r}
+ggplot(prec_pg_common %>% filter(Method == "HRMS1"), 
+        aes(x = cv_ms1, color = window_size, fill = window_size)) + 
+        geom_histogram(aes(y=..density..),bins = 50, alpha = .7) +
+        geom_density(alpha = 0.1,size = 1) +
+        facet_grid(cols = vars(window_size),rows = vars(Method)) + 
+        theme_prism() +
+        scale_fill_manual(values = col_hrms1) + 
+        scale_color_manual(values = col_hrms1) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlab('CV') + ylab("Density") +
+        xlim(c(0,0.4)) + ylim(c(0,25)) 
+
+
+ggplot(prec_pg_common %>% filter(Method == "DIA"), 
+        aes(x = cv_ms2, color = window_size, fill = window_size)) + 
+        geom_histogram(aes(y=..density..),bins = 50, alpha = .7) +
+        geom_density(alpha = 0.1,size = 1) +
+        facet_grid(cols = vars(window_size),rows = vars(Method)) + 
+        theme_prism() +
+        scale_fill_manual(values = col_dia) + 
+        scale_color_manual(values = col_dia) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlab('CV') + ylab("Density") +
+        xlim(c(0,0.4)) + ylim(c(0,25)) 
+```
+
+```{r}
+pg <- prec_pg <- bind_rows(list(
+                      dia15mz    %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      dia30mz  %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      dia60mz   %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      dia120mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      hrms10mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      hrms20mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      hrms40mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size),
+                      hrms100mz %>% select(R.Replicate, PG.ProteinAccessions, PG.MS1Quantity, PG.MS2Quantity, Method:window_size)
+                      )) %>% distinct() %>% select(-R.Replicate) 
+                      
+ranks <-  pg %>%  group_by(PG.ProteinAccessions) %>% 
+                    summarise(expr = log2(mean(PG.MS1Quantity, na.rm = TRUE))) %>% 
+                    mutate(prot_rank = rank(expr))%>% distinct()
+
+rank_pg <- left_join(pg %>% select(method, PG.ProteinAccessions) %>% distinct(), ranks, by = "PG.ProteinAccessions")
+```
+
+
+
+```{r}
+ggplot(rank_pg %>% filter(grepl("OT", method)), 
+        aes(x = prot_rank, y = expr, color = method)) +
+        geom_point(alpha = 0.02) + 
+        facet_wrap(~method, ncol = 1) +
+        theme_prism() +
+        scale_fill_manual(values = myColors2) + 
+        scale_color_manual(values = myColors2) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlab('Rank') + ylab("log2(Abundance)") +
+        geom_vline(xintercept = 1000, linetype ="dashed", size = 0.7, color = "grey") 
+
+```
+
+
+```{r}
+ggplot(rank_pg %>% filter(grepl("OT", method)), 
+        aes(x = prot_rank, color = method, fill = method)) +
+        geom_histogram(bins = 30, alpha = .7) +
+        facet_wrap(~method, ncol = 1) +
+        theme_prism() +
+        scale_fill_manual(values = myColors2) + 
+        scale_color_manual(values = myColors2) +
+        theme_prism() +
+        theme(legend.position = "none") +
+        xlab('Binned rank') + ylab("Count") 
+```
