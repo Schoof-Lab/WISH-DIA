@@ -1,0 +1,609 @@
+### Differential expression analysis for different mESC populations 
+
+
+```{r}
+library(tidyverse)
+library(ggrepel)
+library(limma)
+library(ggprism)
+myColors = c("#5f0f40", '#9a031e', '#f8973d', '#c05310', '#0f4c5c')
+```
+
+
+
+```{r}
+sc_mesc <- read.delim('output/mesc_summary_direct.txt', sep = "\t") %>% as_tibble()
+raw_quant <- read.delim('output/mesc_QCpass_quant_direct.txt', sep = "\t") %>% as_tibble()
+
+raw_quant_long <- raw_quant %>% gather(Cell, Abundance, -PG.ProteinGroups)
+
+raw_norm <- raw_quant %>% select(-PG.ProteinGroups)
+raw_norm <- data.frame(apply(log2(raw_norm), 2, function(x) (x - median(x))/mad(x))) %>% 
+            gather(Cell, Abundance)
+
+pca_unfiltered <- read.delim('output/mesc_pca_unfiltered_direct.txt', sep = "\t")
+```
+
+
+```{r}
+
+med_stats = sc_mesc %>% group_by(Plate) %>% filter(Detected_Proteins > 400) %>%
+                summarise(Detected_Proteins = median(Detected_Proteins))
+#Protein detection
+ggplot(sc_mesc, aes(y = Detected_Proteins, fill = CellType, color = CellType)) + 
+        geom_histogram(alpha= 0.5) +
+        geom_hline(data=med_stats, aes(yintercept = Detected_Proteins, color = Plate), size = 1, linetype= 'dashed') +
+        facet_wrap(~Plate) +
+        scale_fill_manual(values=myColors) +
+        scale_color_manual(values=myColors) +
+        theme_prism() +
+        annotate("rect", xmin = 0, xmax = 40, ymin = 0, ymax = 400,
+           alpha = .4,fill = "grey20") +
+        theme(legend.position ='none') +
+        xlim(c(0,40))
+
+#Protein quantification completeness 
+
+comp <- data.frame(Accessions = raw_quant$PG.ProteinGroups, quantified = apply(raw_quant %>% select(-PG.ProteinGroups), 1, function(x) length(x) - sum(is.na(x)))) %>% 
+                mutate(fraction = quantified/(dim(raw_quant)[2] - 1))
+
+ggplot(comp, aes(x = fraction)) +
+    geom_histogram(aes(y = after_stat(count / sum(count))), bins = 30, fill = myColors[5], color = myColors[5], alpha = .5) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_prism() +
+  xlab('Protein completeness') + ylab('Percentage, %')
+
+#FACS accounting for cell size 
+ggplot(sc_mesc, aes(y = FSC.A, fill = CellType, color = CellType)) + 
+        geom_histogram(aes(x = ..density..), alpha= 0.5) +
+        geom_density(fill=NA, size = 1) +
+        facet_wrap(~Plate) +
+        scale_fill_manual(values=myColors) +
+        scale_color_manual(values=myColors) +
+        theme_prism() +
+        theme(legend.position ='none')
+
+ggplot(sc_mesc, aes(x = FSC.A, y = DAPI.A.Compensated, color = CellType)) + 
+        geom_point(alpha = 0.5, size = 2) +
+        scale_color_manual(values=myColors) +
+        theme_prism() +
+        theme(legend.position ='top') +
+        ylab('DAPI-A') + xlab('FSC-A')
+
+ggplot(sc_mesc %>% filter(QC_Pass == 'True'), aes(x = FSC.A, y = DAPI.A.Compensated, color = Detected_Proteins)) + 
+        geom_point(alpha = 0.8, size = 2) +
+        theme_prism() +
+        facet_wrap(~Plate) +
+        theme(legend.position ='right') +
+        ylab('DAPI-A') + xlab('FSC-A') +
+        #viridis::scale_color_viridis(option='D')
+        scale_color_gradientn(colours = rev(c("#03045e","#023e8a","#0077b6","#0096c7","#00b4d8","#48cae4","#90e0ef","#ade8f4","#caf0f8")))
+
+
+#Show normalization 
+
+ggplot(pca_unfiltered, aes(x = `PC1.27.2.`, y = `PC2.20.5.`, color = Plate)) + 
+    geom_point(alpha=0.6, size = 2) +
+    scale_fill_manual(values=myColors) +
+    scale_color_manual(values=myColors) +
+    theme_prism(border = T) +
+    theme(legend.position ='right') +
+    xlab('PC1 (27.2%)') + ylab('PC2 (20.5%)') +
+    annotate("rect", xmin = 0.09, xmax = 0.34, ymin = -0.09, ymax = 0.1,
+           alpha = .2,fill = "grey20") 
+
+```
+
+
+```{r}
+
+
+#Protein detection
+ggplot(sc_mesc %>% filter(QC_Pass == 'True'), aes(y = Detected_Proteins, fill = CellType, color = CellType)) + 
+        geom_histogram(alpha= 0.5) +
+        geom_hline(data=med_stats, aes(yintercept = Detected_Proteins, color = Plate), size = 1, linetype= 'dashed') +
+        facet_wrap(~Plate) +
+        scale_fill_manual(values=myColors) +
+        scale_color_manual(values=myColors) +
+        theme_prism() +
+        theme(legend.position ='none') +
+        xlim(c(0,30))
+
+```
+
+
+
+```{r}
+# Importing data 
+quant <- read.delim('output/mesc_filtered_quant_direct.txt', sep ="\t")
+pca <- read.delim('output/mesc_pca_direct.txt', sep = "\t")
+umap <- read.delim('output/mesc_umap_direct.txt', sep = "\t")
+pmap <- read.delim('output/mesc_pmap_direct.txt', sep = "\t")
+
+
+#remove keratins from data 
+keratins = read.delim('data/MESC/mus_musculus_keratin.tsv', sep = "\t")
+```
+
+```{r}
+
+### PLATE
+
+#PCA plot
+ggplot(pca, aes(x = `PC1.32.9.`, y = `PC2.24.1.`, color = Plate)) + 
+   geom_point(alpha=0.6, size = 2) +
+    scale_fill_manual(values=myColors) +
+    scale_color_manual(values=myColors) +
+    theme_prism(border = T) +
+    theme(legend.position ='right') +
+    xlab('PC1 (32.9%)') + ylab('PC2 (24.1%)') 
+
+#UMAP plot
+ggplot(umap, aes(x = UMAP1, y = UMAP2, color = Plate)) + 
+    geom_point() +
+    scale_fill_manual(values=myColors) +
+    scale_color_manual(values=myColors) +
+    theme_prism(border = T) +
+    theme(legend.position ='right') +
+    xlab('UMAP1') + ylab('UMAP2')
+
+
+#Cluster
+#UMAP plot
+ggplot(umap, aes(x = UMAP1, y = UMAP2, color = factor(Cluster))) + 
+    geom_point() +
+    scale_fill_manual(values=myColors) +
+    scale_color_manual(values=myColors) +
+    theme_prism(border = T) +
+    theme(legend.position ='right') +
+    xlab('UMAP1') + ylab('UMAP2')
+
+ggplot(pmap, aes(x = UMAP1, y = UMAP2, color = factor(Cluster))) + 
+    geom_point(size = 3, alpha = .7) +
+    scale_color_manual(values= myColors) +
+    theme_prism(border=T)
+
+ggplot(pmap, aes(x = UMAP1, y = UMAP2, color = factor(Plate))) + 
+    geom_point(size = 3, alpha =.7) +
+    scale_color_manual(values= myColors) +
+    theme_prism(border=T)
+```
+
+
+#### Differential expression between cell types (plates)
+
+```{r}
+#Setting up design matrix for experiment
+group <-  pmap$Plate
+design <- model.matrix(~ 0 + group);colnames(design) <- unique(group)
+design
+#First 
+data <- quant[-1]
+data2 <- apply(log2(data),2, function(x) (x - median(x)))
+
+
+contrast <- makeContrasts(m15 - m2i, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt <- topTable(fit2, sort.by = "none", number = Inf)
+tt$Accessions <- quant$PG.ProteinGroups
+tt <- tt %>% 
+        mutate(FDR_log10 = log10(adj.P.Val) * (-1),
+               Score = sqrt(FDR_log10**2 + logFC**2)) 
+candidate <- tt %>% top_n(Score,n=20)
+tt$candidate <- tt$Accessions %in% candidate$Accessions
+
+ggplot(tt, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions, color = candidate)) + 
+        geom_point() +
+        geom_text_repel(data = tt %>% filter(-log10(adj.P.Val) > 5)) +
+        geom_point(data = tt %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20') +
+        scale_color_manual(values = myColors[c(2,5)])
+``` 
+
+```{r}
+#Apply these proteins to the UMAP 
+selected <- tt %>% filter(candidate == TRUE) %>% pull(Accessions)
+prot <- quant %>% filter(PG.ProteinGroups %in% selected) %>% mutate(across(as.numeric(2:518))) %>% select(-PG.ProteinGroups)
+prot <- t(prot)
+
+rownames(prot) <- NULL
+colnames(prot) <- quant %>% filter(PG.ProteinGroups %in% selected) %>% pull(PG.ProteinGroups)
+
+prot <- t(apply(log2(prot), 2, function(x) (x - median(x))/mad(x)))
+prot <- apply(prot, 1, function(x) (x - mean(x))/sd(x))
+
+umap_prot <- cbind(umap, prot)
+
+umap_prot <- umap_prot %>% gather('Protein', 'Abundance', 26:45)
+
+for (i in selected){
+
+    p <- ggplot(umap_prot %>% filter(Protein == i), aes(x = UMAP1, y = UMAP2, color = Abundance)) + 
+        geom_point() +
+        viridis::scale_color_viridis(option = 'H') +
+        theme_prism(border = T) +
+        ggtitle(paste('m15-m2i:', i))
+    show(p)
+}
+
+
+```
+
+```{r}
+ggplot(umap_prot, aes(x = Abundance, fill= factor(Plate))) + 
+    geom_histogram(position='dodge') +
+    facet_wrap(~Protein, scale='free') + 
+    theme_prism(border =T) +
+    scale_fill_manual(values =myColors[c(2,5)])
+
+```
+
+```
+
+### Differential expression between specific clusters
+
+```{r}
+#Setting up design matrix for experiment
+group <- paste('Cluster', pmap$Cluster, sep = "_")
+design <- model.matrix(~ 0 + group);colnames(design) <- unique(group)
+design
+#First 
+data <- quant[-1]
+data2 <- apply(log2(data),2, function(x) (x - median(x)))
+
+
+## m2i clusters
+contrast <- makeContrasts(Cluster_1 - Cluster_3, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt <- topTable(fit2, sort.by = "none", number = Inf)
+tt$Accessions <- quant$PG.ProteinGroups
+tt <- tt %>% 
+        mutate(FDR_log10 = log10(adj.P.Val) * (-1),
+               Score = sqrt(FDR_log10**2 + logFC**2))
+
+candidate <- tt %>% top_n(Score,n=20)
+tt$candidate <- tt$Accessions %in% candidate$Accessions
+
+ggplot(tt, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions)) + 
+        geom_point() +
+        geom_text_repel(data = tt %>% filter(-log10(adj.P.Val) > 25)) +
+        geom_point(data = tt %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20')
+
+```
+
+```{r}
+#Apply these proteins to the UMAP 
+selected <- tt %>% filter(candidate == TRUE) %>% pull(Accessions)
+prot <- quant %>% filter(PG.ProteinGroups %in% selected) %>% mutate(across(as.numeric(2:518))) %>% select(-PG.ProteinGroups)
+prot <- t(prot)
+
+rownames(prot) <- NULL
+colnames(prot) <- quant %>% filter(PG.ProteinGroups %in% selected) %>% pull(PG.ProteinGroups)
+
+prot <- t(apply(log2(prot), 2, function(x) (x - median(x))/mad(x)))
+prot <- apply(prot, 1, function(x) (x - mean(x))/sd(x))
+
+umap_prot <- cbind(umap, prot)
+
+umap_prot <- umap_prot %>% gather('Protein', 'Abundance', 26:45)
+
+for (i in selected){
+
+    p <- ggplot(umap_prot %>% filter(Protein == i, Cluster != 4), aes(x = UMAP1, y = UMAP2, color = Abundance)) + 
+        geom_point() +
+        viridis::scale_color_viridis(option = 'D') +
+        theme_prism(border = T) +
+        ggtitle(paste('m2i-Clusters:', i))
+    show(p)
+}
+
+
+```
+
+```{r}
+
+ggplot(umap_prot, aes(x = Abundance, fill= factor(Plate))) + 
+    geom_histogram(position='dodge') +
+    facet_wrap(~Protein, scale='free') + 
+    theme_prism(border =T) +
+    scale_fill_manual(values =myColors[c(2,5)])
+
+```
+
+
+```{r}
+## m15 weird clusters
+#Setting up design matrix for experiment
+group <- ifelse(paste('Cluster', pmap$Cluster, sep = "_") == 'Cluster_4', 'Cluster_4', 'ALL')
+design <- model.matrix(~ 0 + group);colnames(design) <- unique(group)
+design
+#First 
+data <- quant[-1]
+data2 <- apply(log2(data),2, function(x) (x - median(x)))
+
+
+## m2i clusters
+contrast <- makeContrasts(Cluster_4 - ALL, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt <- topTable(fit2, sort.by = "none", number = Inf)
+tt$Accessions <- quant$PG.ProteinGroups
+tt <- tt %>% 
+        mutate(FDR_log10 = log10(adj.P.Val) * (-1),
+               Score = sqrt(FDR_log10**2 + logFC**2))
+
+candidate <- tt %>% top_n(Score,n=20)
+tt$candidate <- tt$Accessions %in% candidate$Accessions
+
+ggplot(tt, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions)) + 
+        geom_point() +
+        geom_text_repel(data = tt %>% filter(-log10(adj.P.Val) > 25)) +
+        geom_point(data = tt %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20')
+
+```
+
+```{r}
+#Apply these proteins to the UMAP 
+selected <- tt %>% filter(candidate == TRUE) %>% pull(Accessions)
+prot <- quant %>% filter(PG.ProteinGroups %in% selected) %>% mutate(across(as.numeric(2:518))) %>% select(-PG.ProteinGroups)
+prot <- t(prot)
+
+rownames(prot) <- NULL
+colnames(prot) <- quant %>% filter(PG.ProteinGroups %in% selected) %>% pull(PG.ProteinGroups)
+
+prot <- t(apply(log2(prot), 2, function(x) (x - median(x))/mad(x)))
+prot <- apply(prot, 1, function(x) (x - mean(x))/sd(x))
+
+umap_prot <- cbind(umap, prot)
+
+umap_prot <- umap_prot %>% gather('Protein', 'Abundance', 26:45)
+
+for (i in selected){
+
+    p <- ggplot(umap_prot %>% filter(Protein == i), aes(x = UMAP1, y = UMAP2, color = Abundance)) + 
+        geom_point() +
+        viridis::scale_color_viridis(option = 'D') +
+        theme_prism(border = T) +
+        ggtitle(paste('Cluster4 vs ALL:', i))
+    show(p)
+}
+
+
+```
+
+
+```{r}
+
+contrast <- makeContrasts(Cluster_0 - Cluster_2, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt_3_0 <- topTable(fit2, sort.by = "none", number = Inf)
+tt_3_0$Accessions <- quant$PG.ProteinGroups
+
+ggplot(tt_3_0, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions)) + 
+        geom_point() +
+        geom_text_repel(data = tt_3_0 %>% filter(adj.P.Val < 0.1)) +
+        geom_point(data = tt_3_0 %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20')
+
+contrast <- makeContrasts(Cluster_0 - Cluster_1, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt_1_0 <- topTable(fit2, sort.by = "none", number = Inf)
+tt_1_0$Accessions <- quant$PG.ProteinGroups
+
+
+ggplot(tt_1_0, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions)) + 
+        geom_point() +
+        geom_text_repel(data = tt_1_0 %>% filter(adj.P.Val < 0.1)) +
+        geom_point(data = tt_1_0 %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20')
+
+```
+
+
+```{r}
+## m15 clusters
+contrast <- makeContrasts(Cluster_0 - Cluster_2, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt <- topTable(fit2, sort.by = "none", number = Inf)
+tt$Accessions <- quant$PG.ProteinGroups
+tt <- tt %>% 
+        mutate(FDR_log10 = log10(adj.P.Val) * (-1),
+               Score = sqrt(FDR_log10**2 + logFC**2)) 
+candidate <- tt %>% top_n(Score,n=20)
+tt$candidate <- tt$Accessions %in% candidate$Accessions
+
+ggplot(tt, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions, color = candidate)) + 
+        geom_point() +
+        geom_text_repel(data = tt %>% filter(-log10(adj.P.Val) > 5)) +
+        geom_point(data = tt %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20')
+
+```
+
+```{r}
+#Apply these proteins to the UMAP 
+selected <- tt %>% filter(candidate == TRUE) %>% pull(Accessions)
+prot <- quant %>% filter(PG.ProteinGroups %in% selected) %>% mutate(across(as.numeric(2:518))) %>% select(-PG.ProteinGroups)
+prot <- t(prot)
+
+rownames(prot) <- NULL
+colnames(prot) <- quant %>% filter(PG.ProteinGroups %in% selected) %>% pull(PG.ProteinGroups)
+
+prot <- t(apply(log2(prot), 2, function(x) (x - median(x))/mad(x)))
+prot <- apply(prot, 1, function(x) (x - mean(x))/sd(x))
+
+umap_prot <- cbind(umap, prot)
+
+umap_prot <- umap_prot %>% gather('Protein', 'Abundance', 26:45)
+
+for (i in selected){
+
+    p <- ggplot(umap_prot %>% filter(Protein == i, Cluster %in% c(0,2)), aes(x = UMAP1, y = UMAP2, color = Abundance)) + 
+        geom_point() +
+        viridis::scale_color_viridis(option = 'D') +
+        theme_prism(border = T) +
+        ggtitle(paste('m2i-Clusters:', i))
+    show(p)
+}
+
+
+```
+
+
+```{r}
+
+contrast <- makeContrasts(Cluster_0 - Cluster_3, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt_3_0 <- topTable(fit2, sort.by = "none", number = Inf)
+tt_3_0$Accessions <- quant$PG.ProteinGroups
+
+ggplot(tt_3_0, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions)) + 
+        geom_point() +
+        geom_text_repel(data = tt_3_0 %>% filter(adj.P.Val < 0.1)) +
+        geom_point(data = tt_3_0 %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20')
+
+contrast <- makeContrasts(Cluster_0 - Cluster_1, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt_1_0 <- topTable(fit2, sort.by = "none", number = Inf)
+tt_1_0$Accessions <- quant$PG.ProteinGroups
+
+
+ggplot(tt_1_0, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions)) + 
+        geom_point() +
+        geom_text_repel(data = tt_1_0 %>% filter(adj.P.Val < 0.1)) +
+        geom_point(data = tt_1_0 %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20')
+
+```
+
+
+### Find the proteins that separate the three m15 clusters from PCA clusters
+
+```{r}
+select_0_3 <- tt_1_0 %>% arrange(adj.P.Val) %>% filter(Accessions %in% keratins$Entry) %>% head(20) %>% pull(Accessions)
+prot_0_3 <- quant %>% filter(PG.ProteinGroups %in% select_0_3) %>% mutate(across(as.numeric(2:518))) %>% select(-PG.ProteinGroups)
+prot_0_3 <- t(prot_0_3)
+
+rownames(prot_0_3) <- NULL
+colnames(prot_0_3) <- quant %>% filter(PG.ProteinGroups %in% select_0_3) %>% pull(PG.ProteinGroups)
+
+prot_0_3 <- t(apply(log2(prot_0_3), 2, function(x) (x - median(x))/mad(x)))
+prot_0_3 <- apply(prot_0_3, 1, function(x) (x - mean(x))/sd(x))
+
+pca_0_3 <- cbind(pca, prot_0_3)
+
+pca_0_3 <- pca_0_3 %>% gather('Protein', 'Abundance', 14:33) %>% 
+            mutate(Abundance = as.numeric(Abundance))
+
+for (i in select_0_3){
+
+    p <- ggplot(pca_0_3 %>% filter(Protein == i), aes(x = `PC1.32.9.`, y = `PC2.24.1.`, color = Abundance)) + 
+        geom_point() +
+        theme_prism(border = T) +
+        ggtitle(paste('0-2:', i)) +
+        theme(legend.position = 'none')
+    show(p)
+}
+
+```
+
+
+
+```{r}
+myColors = c("#264653","#2a9d8f","#e9c46a","#f4a261","#e76f51")
+
+#Setting up design matrix for experiment
+group <- paste('Cluster', umap$Cluster, sep = "_")
+design <- model.matrix(~ 0 + group);colnames(design) <- unique(group)
+design
+#First 
+data <- quant[-1]
+data2 <- apply(log2(data),2, function(x) (x - median(x))/mad(x))
+
+contrast <- makeContrasts(Cluster_1 - Cluster_0, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt_0_1 <- topTable(fit2, sort.by = "none", number = Inf)
+tt_0_1$Accessions <- quant$PG.ProteinGroups
+
+
+contrast <- makeContrasts(Cluster_2 - Cluster_0, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt_0_2 <- topTable(fit2, sort.by = "none", number = Inf)
+tt_0_2$Accessions <- quant$PG.ProteinGroups
+
+
+contrast <- makeContrasts(Cluster_2 - Cluster_1, levels = design)
+fit <- lmFit(data2, design)
+fit2 <- contrasts.fit(fit, contrast)
+fit2 <- eBayes(fit2, trend = TRUE)
+tt_1_2 <- topTable(fit2, sort.by = "none", number = Inf)
+tt_1_2$Accessions <- quant$PG.ProteinGroups
+
+ggplot(tt_0_2, aes(x=logFC, y = -log10(adj.P.Val), label = Accessions)) + 
+        geom_point() +
+        geom_text_repel(data = tt_0_2 %>% filter(adj.P.Val < 0.1)) +
+        geom_point(data = tt_0_2 %>% filter(Accessions %in% keratins$Entry), size = 3, color = 'red') + 
+        theme_prism() +
+        geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = 'grey20')
+
+```
+
+
+### Find the proteins that separate the three m15 clusters
+
+```{r}
+select_0_3 <- tt_0_2 %>% arrange(adj.P.Val) %>% filter(Accessions %in% keratins$Entry) %>% head(20) %>% pull(Accessions)
+prot_0_3 <- quant %>% filter(PG.ProteinGroups %in% select_0_3) %>% mutate(across(as.numeric(2:518))) %>% select(-PG.ProteinGroups)
+prot_0_3 <- t(prot_0_3)
+
+rownames(prot_0_3) <- NULL
+colnames(prot_0_3) <- quant %>% filter(PG.ProteinGroups %in% select_0_3) %>% pull(PG.ProteinGroups)
+
+prot_0_3 <- t(apply(log2(prot_0_3), 2, function(x) (x - median(x))/mad(x)))
+prot_0_3 <- apply(prot_0_3, 1, function(x) (x - mean(x))/sd(x))
+
+umap_0_3 <- cbind(umap, prot_0_3)
+
+umap_0_3 <- umap_0_3 %>% gather('Protein', 'Abundance', 14:33)
+
+for (i in select_0_3){
+
+    p <- ggplot(umap_0_3 %>% filter(Protein == i), aes(x = UMAP1, y = UMAP2, color = Abundance)) + 
+        geom_point() +
+        viridis::scale_color_viridis(option = 'H') +
+        theme_prism(border = T) +
+        ggtitle(paste('0-2:', i))
+    show(p)
+}
+
+```
