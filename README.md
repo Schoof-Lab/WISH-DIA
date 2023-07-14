@@ -10,6 +10,6 @@ The analysis is carried out the the form of R (.Rmd) and Python (.ipynb) noteboo
     - Figure 3  "summary2.Rmd", "scMethod_precision.Rmd" <br />
     - Figure 4  "HLvsGPF.Rmd" <br />
     - Figure 5  "scProcessing.ipynb", "scVisualization.Rmd" <br />
-    - Figure 6 and 7  "scDataset_direct.ipynb", "mesc_DE.Rmd" <br />
+    - Figure 6 and 7  "scDataset_direct.ipynb" (needs to be run first to generate the output for mesc_DE.Rmd), "mesc_DE.Rmd" <br />
 
 The raw data for the manuscript can be found under the following massIVE identifier: MSV000090792 and MSV000092429.
