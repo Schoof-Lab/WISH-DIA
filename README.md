@@ -1,4 +1,4 @@
-# Enhancing single-cell proteomics through tailored Data-Independent Acquisition and micropillar array-based chromatography
+## Exploration of cell state heterogeneity using single-cell proteomics through sensitivity-tailored data-independent acquisition 
 
 This repository contains all the custom code used for the manuscript 
 
